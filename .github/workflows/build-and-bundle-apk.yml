@@ -1,0 +1,56 @@
+name: Build Android package
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run build
+      - name: Bootstrap Capacitor Android project and retain plugin sources
+        run: |
+          if [ ! -f android/settings.gradle ] && [ ! -f android/settings.gradle.kts ]; then
+            mkdir -p "$RUNNER_TEMP/denta-native"
+            if [ -d android/app/src/main/java/com/dentaspectra/plugins ]; then
+              cp -R android/app/src/main/java/com/dentaspectra/plugins "$RUNNER_TEMP/denta-native/plugins"
+            fi
+            rm -rf android
+            npx cap add android
+            if [ -d "$RUNNER_TEMP/denta-native/plugins" ]; then
+              mkdir -p android/app/src/main/java/com/dentaspectra
+              cp -R "$RUNNER_TEMP/denta-native/plugins" android/app/src/main/java/com/dentaspectra/plugins
+            fi
+          fi
+          npx cap sync android
+      - name: Register native Capacitor plugins
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/java/com/dentaspectra/odontology/MainActivity.java')
+          if p.exists():
+              text=p.read_text()
+              text=text.replace('import com.getcapacitor.BridgeActivity;', 'import com.getcapacitor.BridgeActivity;' + chr(10) + 'import android.os.Bundle;' + chr(10) + 'import com.dentaspectra.plugins.IntraoralMacroCameraTorchPlugin;' + chr(10) + 'import com.dentaspectra.plugins.TmjCondylarAcousticImuPlugin;')
+              text=text.replace('public class MainActivity extends BridgeActivity {', 'public class MainActivity extends BridgeActivity {' + chr(10) + '  @Override public void onCreate(Bundle savedInstanceState) {' + chr(10) + '    registerPlugin(IntraoralMacroCameraTorchPlugin.class);' + chr(10) + '    registerPlugin(TmjCondylarAcousticImuPlugin.class);' + chr(10) + '    super.onCreate(savedInstanceState);' + chr(10) + '  }')
+              p.write_text(text)
+          else:
+              raise SystemExit('Expected Capacitor MainActivity.java was not generated')
+          PY
+      - name: Build debug APK for testing
+        working-directory: android
+        run: ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: denta-spectra-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
