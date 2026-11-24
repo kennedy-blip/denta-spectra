@@ -1,0 +1,12 @@
+<script setup>
+import {onMounted,onUnmounted,ref} from 'vue';
+import fragmentSource from '../shaders/enamelHydroxyapatiteBackground.glsl?raw';
+const canvas=ref(null);let raf=0,gl=null,program=null,started=0;
+const vertexSource=`#version 300 es\nin vec2 position;\nvoid main(){gl_Position=vec4(position,0.0,1.0);}`;
+function compile(type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){console.warn(gl.getShaderInfoLog(shader));return null}return shader}
+function draw(now){if(!gl||!program)return;const element=canvas.value;const dpr=Math.min(window.devicePixelRatio||1,1.6);const w=Math.floor(element.clientWidth*dpr),h=Math.floor(element.clientHeight*dpr);if(element.width!==w||element.height!==h){element.width=w;element.height=h;gl.viewport(0,0,w,h)}gl.useProgram(program);gl.uniform2f(gl.getUniformLocation(program,'u_resolution'),w,h);gl.uniform1f(gl.getUniformLocation(program,'u_time'),(now-started)/1000);gl.uniform1f(gl.getUniformLocation(program,'u_ph'),6.7);gl.drawArrays(gl.TRIANGLES,0,3);raf=requestAnimationFrame(draw)}
+onMounted(()=>{try{gl=canvas.value.getContext('webgl2',{alpha:false,antialias:false,powerPreference:'low-power'});if(!gl)return;program=gl.createProgram();const vs=compile(gl.VERTEX_SHADER,vertexSource),fs=compile(gl.FRAGMENT_SHADER,fragmentSource);if(!vs||!fs)return;gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS)){console.warn(gl.getProgramInfoLog(program));program=null;return}const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);const location=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,2,gl.FLOAT,false,0,0);started=performance.now();raf=requestAnimationFrame(draw)}catch(error){console.warn('WebGL2 background unavailable',error)}});
+onUnmounted(()=>{cancelAnimationFrame(raf);if(gl&&program)gl.deleteProgram(program)});
+</script>
+<template><canvas ref="canvas" class="enamel-shader" aria-hidden="true"></canvas></template>
+<style scoped>.enamel-shader{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;opacity:.34;pointer-events:none}@media(prefers-reduced-motion:reduce){.enamel-shader{display:none}}</style>
