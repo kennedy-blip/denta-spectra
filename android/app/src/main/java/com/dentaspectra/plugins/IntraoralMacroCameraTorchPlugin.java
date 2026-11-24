@@ -12,6 +12,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
@@ -34,6 +35,6 @@ public class IntraoralMacroCameraTorchPlugin extends Plugin {
     if(ContextCompat.checkSelfPermission(getContext(),Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){requestPermissionForAlias("camera",call,"cameraPermission");return;}
     applyTorch(call,enabled);
   }
-  @PermissionCallback private void cameraPermission(PluginCall call){Boolean enabled=call.getBoolean("enabled");if(hasRequiredPermissions("camera"))applyTorch(call,Boolean.TRUE.equals(enabled));else call.reject("Camera permission denied");}
+  @PermissionCallback private void cameraPermission(PluginCall call){Boolean enabled=call.getBoolean("enabled");if(getPermissionState("camera")==PermissionState.GRANTED)applyTorch(call,Boolean.TRUE.equals(enabled));else call.reject("Camera permission denied");}
   private void applyTorch(PluginCall call,boolean enabled){try{CameraManager manager=(CameraManager)getContext().getSystemService(Context.CAMERA_SERVICE);String chosen=null;for(String id:manager.getCameraIdList()){CameraCharacteristics c=manager.getCameraCharacteristics(id);if(Boolean.TRUE.equals(c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE))){chosen=id;break;}}if(chosen==null){call.reject("Torch not available on this device");return;}manager.setTorchMode(chosen,enabled);JSObject result=new JSObject();result.put("enabled",enabled);call.resolve(result);}catch(CameraAccessException e){call.reject("Unable to control torch",e);}}
 }
